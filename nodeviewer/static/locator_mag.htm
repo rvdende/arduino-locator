@@ -1,0 +1,596 @@
+<html>
+	<head>
+		<title>Locator Viewer</title>
+		<style>
+			* { margin: 0; padding: 0;}
+			body { background: #ccc;}
+			canvas { width: 100%; height: 100% }
+		</style>
+	</head>
+	<body>
+		<script src="./three.min.js"></script>
+        <script src="quaternions.js"></script>
+        <script src="locator.js"></script>
+         <script src="/socket.io/socket.io.js"></script>
+<script>
+    var scene = new THREE.Scene()
+
+    var socket = io.connect('http://localhost');
+    
+    var copter = {}
+    copter.forward = new THREE.Vector3(0,1,0);
+    copter.up = new THREE.Vector3(0,0,1);
+    copter.right = new THREE.Vector3();
+    copter.right.copy(copter.forward).cross(copter.up)
+    copter.right.normalize();
+
+
+    copter.forwardDisplay = createVector(scene,copter.forward)     
+    copter.upDisplay = createVector(scene,copter.up) 
+    copter.rightDisplay = createVector(scene,copter.right)     
+    
+    copter.accel = new THREE.Vector3(0,0,-1);
+    copter.accelDisplay = createVector(scene,copter.accel,[0,0.5,1])     
+    copter.accelpredicted = new THREE.Vector3(0,0,-1);
+    copter.accelpredictedDisplay = createVector(scene,copter.accelpredicted,[0.5,0.5,0.5])     
+
+    copter.magnet = new THREE.Vector3(0,0,-1);
+    copter.magnetDisplay = createVector(scene,copter.magnet,[1,1,1])     
+    copter.magnetpredicted = new THREE.Vector3(0,0,-1);
+    copter.magnetpredictedDisplay = createVector(scene,copter.magnetpredicted,[0.5,0.5,0.5])  
+
+    var axis = {}
+    axis.forward = new THREE.Vector3(0,1,0);
+    axis.up = new THREE.Vector3(0,0,1);
+    axis.right = new THREE.Vector3();
+    axis.right.copy(axis.forward).cross(axis.up)
+    axis.right.normalize();
+
+    axis.forwardDisplay = createVector(scene,axis.forward,[0,0,0])     
+    axis.upDisplay = createVector(scene,axis.up,[0,0,0]) 
+    axis.rightDisplay = createVector(scene,axis.right,[0,0,0])     
+
+    var m_min = {x:-671,y:-594,z:-451}
+    var m_max = {x:-81,y:69,z:84}
+    var oldtime = 0;
+
+    socket.on('locator', function (data) {
+        axis.forward = new THREE.Vector3(0,1.0,0);
+        axis.up = new THREE.Vector3(0,0,1.0);
+        axis.right = new THREE.Vector3();
+        axis.right.copy(axis.forward).cross(axis.up)
+        axis.right.normalize();
+
+
+        m_min.x = Math.min(m_min.x, data.mx);
+        m_min.y = Math.min(m_min.y, data.my);
+        m_min.z = Math.min(m_min.z, data.mz);
+        m_max.x = Math.max(m_max.x, data.mx);
+        m_max.y = Math.max(m_max.y, data.my);
+        m_max.z = Math.max(m_max.z, data.mz);
+
+
+
+        //console.log(gravity.angleTo(accelvec))
+
+        /*
+        var rotatedvec = firstvec.applyAxisAngle(crossvec,aaa);
+        rotatedvec.normalize();
+        animvec.geometry.vertices[1].x = rotatedvec.x
+        animvec.geometry.vertices[1].y = rotatedvec.y
+        animvec.geometry.vertices[1].z = rotatedvec.z
+        animvec.geometry.verticesNeedUpdate = true;   
+        */
+
+        //time
+
+        var deltatime = (data.time - oldtime)/1000000
+        oldtime = data.time;
+        if (deltatime > 0.1) {
+            console.log('error: updating clock')
+        } else {
+            
+            var rate = deltatime/100/360*Math.PI*2;
+            //console.log(rate)
+
+            copter.up.applyAxisAngle(copter.forward,data.gy*rate)
+            copter.right.applyAxisAngle(copter.forward,data.gy*rate)
+
+            copter.up.applyAxisAngle(copter.right,-data.gx*rate)
+            copter.forward.applyAxisAngle(copter.right,-data.gx*rate)
+
+            copter.forward.applyAxisAngle(copter.up,-data.gz*rate)
+            copter.right.applyAxisAngle(copter.up,-data.gz*rate)
+
+            //APPLY GYRO OFFSET TO ACCELEROMETER VECTOR
+            copter.accel = new THREE.Vector3(data.ax,-data.ay,data.az);
+            copter.accel.normalize();
+            
+            var forwarddiff = copter.forward.angleTo( new THREE.Vector3(0,1.0,0) )
+            var forwardcross = new THREE.Vector3(0,1.0,0)            
+            forwardcross.cross(copter.forward)
+            forwardcross.normalize();
+            axis.forward.applyAxisAngle(forwardcross,forwarddiff)    
+            axis.up.applyAxisAngle(forwardcross,forwarddiff) 
+            axis.right.applyAxisAngle(forwardcross,forwarddiff) 
+            copter.accel.applyAxisAngle(forwardcross,forwarddiff) 
+        
+            var rightcross = new THREE.Vector3().copy(axis.right)
+            rightcross.cross(copter.right)
+            rightcross.normalize();
+            var rightdiff = axis.right.angleTo( copter.right )
+            
+            axis.forward.applyAxisAngle(rightcross,rightdiff)    
+            axis.up.applyAxisAngle(rightcross,rightdiff) 
+            axis.right.applyAxisAngle(rightcross,rightdiff) 
+            copter.accel.applyAxisAngle(rightcross,rightdiff) 
+
+            /// CORRECT DRIFT USING ANGLE BETWEEN GRAVITY AND ACCELEROMETER VECTOR                
+            var gravity = new THREE.Vector3(0,0,-1.0)
+            var gravityangle = gravity.angleTo(copter.accel)
+            var gravitycross = new THREE.Vector3();
+            gravitycross.copy(copter.accel);
+            gravitycross.cross(gravity)
+            gravitycross.normalize();
+
+            gravityangle *= 0.05;
+
+            copter.forward.applyAxisAngle(gravitycross,gravityangle)    
+            copter.up.applyAxisAngle(gravitycross,gravityangle) 
+            copter.right.applyAxisAngle(gravitycross,gravityangle) 
+            copter.accel.applyAxisAngle(gravitycross,gravityangle) 
+           
+            copter.update();
+            axis.update();
+        }
+
+        
+     });
+
+
+    
+    createAxisGrid(scene)
+    //createAxisIcon(scene)
+    
+    /*
+    
+    
+
+
+    //LOCATOR
+    var locator = new THREE.Object3D();
+    scene.add(locator)
+    locator.useQuaternion = true;
+    createAxisIcon(locator)
+
+    //PLANE
+    
+    var plane;
+    var loader = new THREE.JSONLoader();
+    loader.load( "planeobject.js", function(loadeddata) {
+        var texture = THREE.ImageUtils.loadTexture( 'texture.jpg' );
+        texture.anisotropy = renderer.getMaxAnisotropy();
+        var material = new THREE.MeshBasicMaterial( { map: texture } );
+        plane = new THREE.Mesh(loadeddata, material);
+        plane.scale.x = 0.1;
+        plane.scale.y = 0.1;
+        plane.scale.z = 0.1;    
+        plane.rotation.x = Math.PI/2
+        //plane.rotation.z = Math.PI/2
+        locator.add(plane);
+    } );
+    */  
+
+    
+ /*
+    var origin = new THREE.Vector3(0,0,0)
+    var xVec = new THREE.Vector3(1,0,0)
+    createVector(scene,xVec)
+    var yVec = new THREE.Vector3(0,1,0)
+    createVector(scene,yVec)
+    var zVec = new THREE.Vector3(0,0,1)
+    createVector(scene,zVec)
+    */
+        
+    
+    /*
+    ///EXPERIMENTS    
+    var firstvec = new THREE.Vector3(Math.random()*Math.PI*2,Math.random()*Math.PI*2,Math.random()*Math.PI*2)
+    //firstvec.normalize();
+    createVector(scene,firstvec)
+    var secondvec = new THREE.Vector3(Math.random()*Math.PI*2,Math.random()*Math.PI*2,Math.random()*Math.PI*2)
+    secondvec.normalize();
+    createVector(scene,secondvec)
+    console.log(firstvec.dot(secondvec))
+    console.log(firstvec.angleTo(secondvec)/Math.PI*180)    
+    
+
+    var addedvec = firstvec.add(secondvec)
+    addedvec.normalize();
+    createVector(scene,addedvec)
+   
+    
+    var crossvec = firstvec.cross(secondvec)
+    crossvec.normalize();
+    createVector(scene,crossvec)    
+
+    console.log('test orthagonal')
+    console.log(crossvec.dot(firstvec))
+    console.log(crossvec.dot(secondvec))
+
+
+    var rotatedvec = firstvec.applyAxisAngle(crossvec,aaa);
+    rotatedvec.normalize();
+    animvec = createVector(scene,rotatedvec)        
+    
+    */
+
+    //create and move our camera
+    var cameraPivot = new THREE.Object3D();
+    scene.add(cameraPivot)
+    scene.fog = new THREE.FogExp2( 0x000000, 0.03 );
+
+    var camera = new THREE.PerspectiveCamera( 90, window.innerWidth / window.innerHeight, 0.1, 10000 )
+    camera.position.z = 1
+    cameraPivot.add(camera)
+    cameraPivot.rotation.y = 0.25
+    cameraPivot.rotation.x = 1
+    var rendersettings = {}
+    rendersettings.antialias = true
+    var renderer = new THREE.WebGLRenderer(rendersettings)
+    renderer.setSize( window.innerWidth, window.innerHeight );
+    document.body.appendChild( renderer.domElement );           
+    document.addEventListener( 'mousedown', mouseDown, false );
+    document.addEventListener( 'mouseup', mouseUp, false );
+    document.addEventListener( 'mousemove', mouseMove, false );
+    /*
+        RENDER FRAMES AND ANIMATE
+    */
+
+    var UI = {
+        x : 0,
+        y : 0,
+        leftClick : 0
+    }
+
+    function mouseMove(mouse) {
+        //console.log(mouse)
+        if (UI.leftClick == 1) {
+            cameraPivot.rotation.y -= (mouse.clientX - UI.x)/300;
+            cameraPivot.rotation.x -= (mouse.clientY - UI.y)/300;
+        }
+        UI.x = mouse.clientX;
+        UI.y = mouse.clientY;
+    }
+
+    function mouseDown(mouse) {
+        if (mouse.button == 0) {
+            UI.leftClick = 1;
+        }
+    }
+
+    function mouseUp(mouse) {
+        if (mouse.button == 0) {
+            UI.leftClick = 0;   
+        }
+    }
+
+    animate();      //this runs the function animate() below
+
+    function animate() {
+        //do your animations in here
+    	//camera.rotation.z += 0.01     //adds 0.01 to the current camera rotation in z
+        //mesh.rotation.x += 0.03     //adds 0.01 to the current camera rotation in z
+        
+        // which then just keeps running because of threejs's requestAnimationFrame(animate) 
+        requestAnimationFrame( animate );         
+        renderer.render( scene, camera );
+    }
+
+
+    /*
+        HELPER FUNCTIONS
+    */
+
+    copter.update = function() {   
+        copter.forward.normalize();
+        copter.forwardDisplay.geometry.vertices[1].x = copter.forward.x
+        copter.forwardDisplay.geometry.vertices[1].y = copter.forward.y
+        copter.forwardDisplay.geometry.vertices[1].z = copter.forward.z
+        copter.forwardDisplay.geometry.verticesNeedUpdate = true;
+
+        copter.up.normalize();
+        copter.upDisplay.geometry.vertices[1].x = copter.up.x
+        copter.upDisplay.geometry.vertices[1].y = copter.up.y
+        copter.upDisplay.geometry.vertices[1].z = copter.up.z
+        copter.upDisplay.geometry.verticesNeedUpdate = true;    
+
+        copter.right.normalize();
+        copter.rightDisplay.geometry.vertices[1].x = copter.right.x
+        copter.rightDisplay.geometry.vertices[1].y = copter.right.y
+        copter.rightDisplay.geometry.vertices[1].z = copter.right.z
+        copter.rightDisplay.geometry.verticesNeedUpdate = true;    
+
+        copter.accel.normalize();
+        copter.accelDisplay.geometry.vertices[1].x = copter.accel.x
+        copter.accelDisplay.geometry.vertices[1].y = copter.accel.y
+        copter.accelDisplay.geometry.vertices[1].z = copter.accel.z
+        copter.accelDisplay.geometry.verticesNeedUpdate = true;    
+
+        copter.accelpredicted.normalize();
+        copter.accelpredictedDisplay.geometry.vertices[1].x = copter.accelpredicted.x
+        copter.accelpredictedDisplay.geometry.vertices[1].y = copter.accelpredicted.y
+        copter.accelpredictedDisplay.geometry.vertices[1].z = copter.accelpredicted.z
+        copter.accelpredictedDisplay.geometry.verticesNeedUpdate = true;    
+
+        copter.magnet.normalize();
+        copter.magnetDisplay.geometry.vertices[1].x = copter.magnet.x
+        copter.magnetDisplay.geometry.vertices[1].y = copter.magnet.y
+        copter.magnetDisplay.geometry.vertices[1].z = copter.magnet.z
+        copter.magnetDisplay.geometry.verticesNeedUpdate = true;    
+
+        copter.magnetpredicted.normalize();
+        copter.magnetpredictedDisplay.geometry.vertices[1].x = copter.magnetpredicted.x
+        copter.magnetpredictedDisplay.geometry.vertices[1].y = copter.magnetpredicted.y
+        copter.magnetpredictedDisplay.geometry.vertices[1].z = copter.magnetpredicted.z
+        copter.magnetpredictedDisplay.geometry.verticesNeedUpdate = true;            
+    }
+
+axis.update = function() {   
+        axis.forward.normalize();
+        axis.forwardDisplay.geometry.vertices[1].x = axis.forward.x
+        axis.forwardDisplay.geometry.vertices[1].y = axis.forward.y
+        axis.forwardDisplay.geometry.vertices[1].z = axis.forward.z
+        axis.forwardDisplay.geometry.verticesNeedUpdate = true;
+
+        axis.up.normalize();
+        axis.upDisplay.geometry.vertices[1].x = axis.up.x
+        axis.upDisplay.geometry.vertices[1].y = axis.up.y
+        axis.upDisplay.geometry.vertices[1].z = axis.up.z
+        axis.upDisplay.geometry.verticesNeedUpdate = true;    
+
+        axis.right.normalize();
+        axis.rightDisplay.geometry.vertices[1].x = axis.right.x
+        axis.rightDisplay.geometry.vertices[1].y = axis.right.y
+        axis.rightDisplay.geometry.vertices[1].z = axis.right.z
+        axis.rightDisplay.geometry.verticesNeedUpdate = true;    
+
+                 
+    }
+
+    function rgb(red,green,blue) {
+        var r = Math.round( red )
+        var g = Math.round( green )
+        var b = Math.round( blue )
+        return "rgb("+r+","+g+","+b+")"
+    }
+
+    function createVector(parent,v,col) {
+        //ACCEL - shows which way is down
+        //var accel = new THREE.Object3D();
+        var vectorgeometry = new THREE.Geometry();
+        vectorgeometry.vertices.push(new THREE.Vector3(0, 0, 0));
+        vectorgeometry.vertices.push(new THREE.Vector3(v.x, v.y, v.z));
+        
+        var veccol = new THREE.Color();
+        if (col) {
+            veccol.setRGB(Math.abs(col[0]), Math.abs(col[1]), Math.abs(col[2]))
+        } else {
+            var vec = new THREE.Vector3(v.x,v.y,v.z);
+            vec.normalize();        
+            veccol.setRGB(Math.abs(vec.x), Math.abs(vec.y), Math.abs(vec.z))
+        }
+        
+        var accelline = new THREE.Line(vectorgeometry, new THREE.LineBasicMaterial({
+            color: veccol,
+            fog:true
+        }));
+
+        parent.add(accelline);
+        return accelline;
+        //parent.add(accel)
+    }
+
+    function createLine(parent,v1,v2) {
+        var vectorgeometry = new THREE.Geometry();
+        vectorgeometry.vertices.push(new THREE.Vector3(v1.x, v1.y, v1.z));
+        vectorgeometry.vertices.push(new THREE.Vector3(v2.x, v2.y, v2.z));
+        var veccol = new THREE.Color();
+        veccol.setRGB(0, 0, 0)
+        var accelline = new THREE.Line(vectorgeometry, new THREE.LineBasicMaterial({
+            color: veccol
+        }));
+        parent.add(accelline);
+        return vectorgeometry;
+    }
+
+    function createAxisIcon(parent) {
+        
+        var geometry = new THREE.Geometry();
+        geometry.vertices.push(new THREE.Vector3(0, 0, 0));
+        geometry.vertices.push(new THREE.Vector3(1, 0, 0));
+        //geometry.vertices.push(new THREE.Vector3(10, 0, 0));
+        var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+            color: 0xff0000
+        }));
+        parent.add(line);
+        var geometry = new THREE.Geometry();
+        geometry.vertices.push(new THREE.Vector3(0, 0, 0));
+        geometry.vertices.push(new THREE.Vector3(0, 1, 0));
+        //geometry.vertices.push(new THREE.Vector3(10, 0, 0));
+        var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+            color: 0x00ff00
+        }));
+        parent.add(line);
+        var geometry = new THREE.Geometry();
+        geometry.vertices.push(new THREE.Vector3(0, 0, 0));
+        geometry.vertices.push(new THREE.Vector3(0, 0, 1));
+        //geometry.vertices.push(new THREE.Vector3(10, 0, 0 + offsetz));
+        var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+            color: 0x0000ff
+        }));
+        parent.add(line);
+    }
+
+    function createAxisGrid(parent) {
+        var offsetz = -0.005;
+        for (var x = -100; x < 100; x++) {
+            var geometry = new THREE.Geometry();
+            geometry.vertices.push(new THREE.Vector3(x/10, -10, 0 + offsetz));
+            geometry.vertices.push(new THREE.Vector3(x/10,  10, 0 + offsetz));
+            if (x % 10 == 0) {
+                var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+                    color: 0x999999
+                }));
+            } else {
+                var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+                    color: 0xdddddd
+                }));    
+            }            
+            parent.add(line); 
+        }
+        for (var y = -100; y < 100; y++) {
+            var geometry = new THREE.Geometry();
+            geometry.vertices.push(new THREE.Vector3(-10, y/10, 0 + offsetz));
+            geometry.vertices.push(new THREE.Vector3( 10, y/10, 0 + offsetz));
+            if (y % 10 == 0) {
+                var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+                    color: 0x999999
+                }));
+            } else {
+                var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+                    color: 0xdddddd
+                }));    
+            }            
+            parent.add(line);           
+        }   
+    }
+
+
+    function LSM303heading( from )
+
+    {
+        var m = locator_raw.m;
+        // shift and scale
+        m.x = (m.x - m_min.x) / (m_max.x - m_min.x) * 2 - 1.0;
+        m.y = (m.y - m_min.y) / (m_max.y - m_min.y) * 2 - 1.0;
+        m.z = (m.z - m_min.z) / (m_max.z - m_min.z) * 2 - 1.0;
+
+        var temp_a = locator_raw.a;
+        // normalize
+        vector_normalize( temp_a );
+        //vector_normalize( m);
+
+        // compute E and N
+        var E = new THREE.Vector3();
+        var N = new THREE.Vector3();
+        vector_cross(locator_raw.m, temp_a, E);
+        E.normalize();
+        vector_cross( temp_a,  E,  N);
+
+        // compute heading
+        var heading = Math.atan2(vector_dot( E,  from), vector_dot( N,  from)) ;
+        //if (heading < 0) heading += 360;
+      return heading;
+    }
+ 
+    function vector_normalize(a) {
+        var mag = Math.sqrt( vector_dot(a,a) )
+        a.x /= mag
+        a.y /= mag
+        a.z /= mag
+    }
+
+    function vector_cross(a, b, out)
+    {
+      out.x = a.y*b.z - a.z*b.y;
+      out.y = a.z*b.x - a.x*b.z;
+      out.z = a.x*b.y - a.y*b.x;
+    }
+
+    function vector_dot(a, b)
+    {
+      return a.x*b.x+a.y*b.y+a.z*b.z;
+    }
+
+    
+
+/*
+public static Quaternion ToQ (THREE.Vector3 v)
+{
+    return ToQ (v.y, v.x, v.z);
+}
+
+public static Quaternion ToQ (float yaw, float pitch, float roll)
+{
+    yaw *= Mathf.Deg2Rad;
+    pitch *= Mathf.Deg2Rad;
+    roll *= Mathf.Deg2Rad;
+    float rollOver2 = roll * 0.5f;
+    float sinRollOver2 = (float)Math.Sin ((double)rollOver2);
+    float cosRollOver2 = (float)Math.Cos ((double)rollOver2);
+    float pitchOver2 = pitch * 0.5f;
+    float sinPitchOver2 = (float)Math.Sin ((double)pitchOver2);
+    float cosPitchOver2 = (float)Math.Cos ((double)pitchOver2);
+    float yawOver2 = yaw * 0.5f;
+    float sinYawOver2 = (float)Math.Sin ((double)yawOver2);
+    float cosYawOver2 = (float)Math.Cos ((double)yawOver2);
+    Quaternion result;
+    result.w = cosYawOver2 * cosPitchOver2 * cosRollOver2 + sinYawOver2 * sinPitchOver2 * sinRollOver2;
+    result.x = cosYawOver2 * sinPitchOver2 * cosRollOver2 + sinYawOver2 * cosPitchOver2 * sinRollOver2;
+    result.y = sinYawOver2 * cosPitchOver2 * cosRollOver2 - cosYawOver2 * sinPitchOver2 * sinRollOver2;
+    result.z = cosYawOver2 * cosPitchOver2 * sinRollOver2 - sinYawOver2 * sinPitchOver2 * cosRollOver2;
+
+    return result;
+}
+
+public static THREE.Vector3 FromQ2 (Quaternion q1)
+{
+    float sqw = q1.w * q1.w;
+    float sqx = q1.x * q1.x;
+    float sqy = q1.y * q1.y;
+    float sqz = q1.z * q1.z;
+    float unit = sqx + sqy + sqz + sqw; // if normalised is one, otherwise is correction factor
+    float test = q1.x * q1.w - q1.y * q1.z;
+    THREE.Vector3 v;
+
+    if (test>0.4995f*unit) { // singularity at north pole
+        v.y = 2f * Mathf.Atan2 (q1.y, q1.x);
+        v.x = Mathf.PI / 2;
+        v.z = 0;
+        return NormalizeAngles (v * Mathf.Rad2Deg);
+    }
+    if (test<-0.4995f*unit) { // singularity at south pole
+        v.y = -2f * Mathf.Atan2 (q1.y, q1.x);
+        v.x = -Mathf.PI / 2;
+        v.z = 0;
+        return NormalizeAngles (v * Mathf.Rad2Deg);
+    }
+    Quaternion q = new Quaternion (q1.w, q1.z, q1.x, q1.y);
+    v.y = (float)Math.Atan2 (2f * q.x * q.w + 2f * q.y * q.z, 1 - 2f * (q.z * q.z + q.w * q.w));     // Yaw
+    v.x = (float)Math.Asin (2f * (q.x * q.z - q.w * q.y));                             // Pitch
+    v.z = (float)Math.Atan2 (2f * q.x * q.y + 2f * q.z * q.w, 1 - 2f * (q.y * q.y + q.z * q.z));      // Roll
+    return NormalizeAngles (v * Mathf.Rad2Deg);
+}
+
+static THREE.Vector3 NormalizeAngles (THREE.Vector3 angles)
+{
+    angles.x = NormalizeAngle (angles.x);
+    angles.y = NormalizeAngle (angles.y);
+    angles.z = NormalizeAngle (angles.z);
+    return angles;
+}
+
+static float NormalizeAngle (float angle)
+{
+    while (angle>360)
+        angle -= 360;
+    while (angle<0)
+        angle += 360;
+    return angle;
+}
+*/
+
+</script>
+	</body>
+</html>
