@@ -45,10 +45,15 @@ Sample data
 You should get something like this. 
 
 ax, ay, az  - Accelerometer meters per second
+
 mx, my, mz  - Magnetometer flux
+
 gx, gy, gz 	- gyro in degrees per second
+
 tc 			- temperature in 0.1 Celsius
+
 pr  		- air presure in HPa
+
 al    		- altitude in Meters
 
 ```
