@@ -1,7 +1,10 @@
 arduino-locator
 ==============
 
-Arduino based realtime locator - initial 0.1 beta
+Realworld to virtual realtime positional data - initial 0.2 operational
+
+![locator1!](https://raw.github.com/fluentart/arduino-locator/master/screenshot1.jpg)
+![locator2!](https://raw.github.com/fluentart/arduino-locator/master/screenshot2.jpg)
 
 Project aims
 ===============
