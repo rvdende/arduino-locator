@@ -34,10 +34,17 @@
     copter.accelpredicted = new THREE.Vector3(0,0,-1);
     copter.accelpredictedDisplay = createVector(scene,copter.accelpredicted,[0.5,0.5,0.5])     
 
-    copter.magnet = new THREE.Vector3(0,0,-1);
-    copter.magnetDisplay = createVector(scene,copter.magnet,[1,1,1])     
+    copter.magnet = new THREE.Vector3(0,-1,-1);
+    copter.magnetDisplay = createVector(scene,copter.magnet,[1,0.5,0])     
     copter.magnetpredicted = new THREE.Vector3(0,0,-1);
     copter.magnetpredictedDisplay = createVector(scene,copter.magnetpredicted,[0.5,0.5,0.5])  
+
+    copter.magnetlock = new THREE.Vector3(-0.5,-1,-1);
+    copter.magnetlockDisplay = createVector(scene,copter.magnetlock, [1,0.75,0.25])     
+
+    var magnetlocked = false;
+    var magnetlock = new THREE.Vector3(-1,-1,-1);
+    var magnetlast = new THREE.Vector3(-1,-1,-1);
 
     var axis = {}
     axis.forward = new THREE.Vector3(0,1,0);
@@ -50,8 +57,11 @@
     axis.upDisplay = createVector(scene,axis.up,[0,0,0]) 
     axis.rightDisplay = createVector(scene,axis.right,[0,0,0])     
 
-    var m_min = {x:-671,y:-594,z:-451}
-    var m_max = {x:-81,y:69,z:84}
+    var m_min = {"x":-707,"y":-717,"z":-461}
+	var m_max = {"x":-109,"y":70,"z":123} 
+
+    //var m_min = {x:9999,y:9999,z:9999}
+    //var m_max = {x:-9999,y:-9999,z:-9999}
     var oldtime = 0;
 
     socket.on('locator', function (data) {
@@ -62,6 +72,7 @@
         axis.right.normalize();
 
 
+
         m_min.x = Math.min(m_min.x, data.mx);
         m_min.y = Math.min(m_min.y, data.my);
         m_min.z = Math.min(m_min.z, data.mz);
@@ -69,6 +80,14 @@
         m_max.y = Math.max(m_max.y, data.my);
         m_max.z = Math.max(m_max.z, data.mz);
 
+
+        copter.magnet.x = (data.mx - m_min.x) / (m_max.x - m_min.x) * 2 - 1.0;
+        copter.magnet.y = (data.my - m_min.y) / (m_max.y - m_min.y) * 2 - 1.0;
+        copter.magnet.z = (data.mz - m_min.z) / (m_max.z - m_min.z) * 2 - 1.0;
+
+        
+        copter.magnet.y *= -1
+		//copter.magnet.normalize();
 
 
         //console.log(gravity.angleTo(accelvec))
@@ -87,7 +106,7 @@
         var deltatime = (data.time - oldtime)/1000000
         oldtime = data.time;
         if (deltatime > 0.1) {
-            console.log('error: updating clock')
+            console.log('Updating clock')
         } else {
             
             var rate = deltatime/100/360*Math.PI*2;
@@ -114,6 +133,7 @@
             axis.up.applyAxisAngle(forwardcross,forwarddiff) 
             axis.right.applyAxisAngle(forwardcross,forwarddiff) 
             copter.accel.applyAxisAngle(forwardcross,forwarddiff) 
+            copter.magnet.applyAxisAngle(forwardcross,forwarddiff) 
         
             var rightcross = new THREE.Vector3().copy(axis.right)
             rightcross.cross(copter.right)
@@ -124,24 +144,64 @@
             axis.up.applyAxisAngle(rightcross,rightdiff) 
             axis.right.applyAxisAngle(rightcross,rightdiff) 
             copter.accel.applyAxisAngle(rightcross,rightdiff) 
+            copter.magnet.applyAxisAngle(rightcross,rightdiff) 
 
             /// CORRECT DRIFT USING ANGLE BETWEEN GRAVITY AND ACCELEROMETER VECTOR                
             var gravity = new THREE.Vector3(0,0,-1.0)
-            var gravityangle = gravity.angleTo(copter.accel)
+            var gravityerror = gravity.angleTo(copter.accel)
             var gravitycross = new THREE.Vector3();
             gravitycross.copy(copter.accel);
             gravitycross.cross(gravity)
             gravitycross.normalize();
 
-            gravityangle *= 0.05;
+            gravityerror *= 0.05; //SLOWS DOWN CORRECTION
 
-            copter.forward.applyAxisAngle(gravitycross,gravityangle)    
-            copter.up.applyAxisAngle(gravitycross,gravityangle) 
-            copter.right.applyAxisAngle(gravitycross,gravityangle) 
-            copter.accel.applyAxisAngle(gravitycross,gravityangle) 
+            copter.forward.applyAxisAngle(gravitycross,gravityerror)    
+            copter.up.applyAxisAngle(gravitycross,gravityerror) 
+            copter.right.applyAxisAngle(gravitycross,gravityerror) 
+            copter.accel.applyAxisAngle(gravitycross,gravityerror) 
+            copter.magnet.applyAxisAngle(gravitycross,gravityerror) 
+            magnetlast.copy(copter.magnet)
+
+            if (magnetlocked) {
+	            // USE 'L' key to set magnet lock
+	            /// CORRECT DRIFT USING MAGNETOMETER
+	            var magnetcross = new THREE.Vector3();
+	            magnetcross.copy(copter.magnet)
+	            magnetcross.cross(copter.magnetlock)
+	            //magnetcross.normalize();
+	            var magneterror = copter.magnetlock.angleTo(copter.magnet)
+	            magneterror *= 0.03;	//SLOWS DOWN CORRECTION
+
+	            
+	            copter.forward.applyAxisAngle(magnetcross,magneterror)    
+	            copter.up.applyAxisAngle(magnetcross,magneterror) 
+	            copter.right.applyAxisAngle(magnetcross,magneterror) 
+	            copter.accel.applyAxisAngle(magnetcross,magneterror) 
+	            copter.magnet.applyAxisAngle(magnetcross,magneterror) 	
+	            
+            } else {
+            	copter.doMagLock();
+            }
+            
+
+            
+
+
+
+
+            
            
             copter.update();
             axis.update();
+
+            var m1 = new THREE.Matrix4();
+			m1.lookAt( copter.forward, locator.position, copter.up );
+			locator.quaternion.setFromRotationMatrix( m1 );
+
+            //UPDATE 3D PIVOT
+            //locator.rotation.x += 0.1;
+            
         }
 
         
@@ -152,7 +212,7 @@
     createAxisGrid(scene)
     //createAxisIcon(scene)
     
-    /*
+    
     
     
 
@@ -161,7 +221,7 @@
     var locator = new THREE.Object3D();
     scene.add(locator)
     locator.useQuaternion = true;
-    createAxisIcon(locator)
+    //createAxisIcon(locator)
 
     //PLANE
     
@@ -175,11 +235,12 @@
         plane.scale.x = 0.1;
         plane.scale.y = 0.1;
         plane.scale.z = 0.1;    
-        plane.rotation.x = Math.PI/2
+        plane.rotation.x = 0
+        plane.rotation.y = Math.PI
         //plane.rotation.z = Math.PI/2
         locator.add(plane);
     } );
-    */  
+    
 
     
  /*
@@ -243,6 +304,9 @@
     document.addEventListener( 'mousedown', mouseDown, false );
     document.addEventListener( 'mouseup', mouseUp, false );
     document.addEventListener( 'mousemove', mouseMove, false );
+	document.addEventListener( 'keydown', keyDown, false );
+    document.addEventListener( 'keyup', keyUp, false );    
+
     /*
         RENDER FRAMES AND ANIMATE
     */
@@ -251,6 +315,20 @@
         x : 0,
         y : 0,
         leftClick : 0
+    }
+
+
+    function keyDown(key) {
+    	console.log(key.keyCode)
+
+    	if (key.keyCode == 76) {
+    		// 'L' key locks in new magnetic guide point. this is run automatically on start
+ 			copter.doMagLock();
+    	}
+    }
+
+	function keyUp(key) {
+    	
     }
 
     function mouseMove(mouse) {
@@ -267,6 +345,7 @@
         if (mouse.button == 0) {
             UI.leftClick = 1;
         }
+
     }
 
     function mouseUp(mouse) {
@@ -291,6 +370,13 @@
     /*
         HELPER FUNCTIONS
     */
+
+    copter.doMagLock = function() {
+    		//this takes the current magnetic reading and locks it in as a guide point
+    		magnetlocked = true;
+			console.log("heading locked in")    
+			copter.magnetlock.copy(magnetlast)
+    }
 
     copter.update = function() {   
         copter.forward.normalize();
@@ -333,7 +419,14 @@
         copter.magnetpredictedDisplay.geometry.vertices[1].x = copter.magnetpredicted.x
         copter.magnetpredictedDisplay.geometry.vertices[1].y = copter.magnetpredicted.y
         copter.magnetpredictedDisplay.geometry.vertices[1].z = copter.magnetpredicted.z
-        copter.magnetpredictedDisplay.geometry.verticesNeedUpdate = true;            
+        copter.magnetpredictedDisplay.geometry.verticesNeedUpdate = true;           
+
+        copter.magnetlock.normalize();
+        copter.magnetlockDisplay.geometry.vertices[1].x = copter.magnetlock.x
+        copter.magnetlockDisplay.geometry.vertices[1].y = copter.magnetlock.y
+        copter.magnetlockDisplay.geometry.vertices[1].z = copter.magnetlock.z
+        copter.magnetlockDisplay.geometry.verticesNeedUpdate = true;    
+
     }
 
 axis.update = function() {   
@@ -404,33 +497,7 @@ axis.update = function() {
         return vectorgeometry;
     }
 
-    function createAxisIcon(parent) {
-        
-        var geometry = new THREE.Geometry();
-        geometry.vertices.push(new THREE.Vector3(0, 0, 0));
-        geometry.vertices.push(new THREE.Vector3(1, 0, 0));
-        //geometry.vertices.push(new THREE.Vector3(10, 0, 0));
-        var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
-            color: 0xff0000
-        }));
-        parent.add(line);
-        var geometry = new THREE.Geometry();
-        geometry.vertices.push(new THREE.Vector3(0, 0, 0));
-        geometry.vertices.push(new THREE.Vector3(0, 1, 0));
-        //geometry.vertices.push(new THREE.Vector3(10, 0, 0));
-        var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
-            color: 0x00ff00
-        }));
-        parent.add(line);
-        var geometry = new THREE.Geometry();
-        geometry.vertices.push(new THREE.Vector3(0, 0, 0));
-        geometry.vertices.push(new THREE.Vector3(0, 0, 1));
-        //geometry.vertices.push(new THREE.Vector3(10, 0, 0 + offsetz));
-        var line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
-            color: 0x0000ff
-        }));
-        parent.add(line);
-    }
+    
 
     function createAxisGrid(parent) {
         var offsetz = -0.005;
@@ -466,130 +533,6 @@ axis.update = function() {
         }   
     }
 
-
-    function LSM303heading( from )
-
-    {
-        var m = locator_raw.m;
-        // shift and scale
-        m.x = (m.x - m_min.x) / (m_max.x - m_min.x) * 2 - 1.0;
-        m.y = (m.y - m_min.y) / (m_max.y - m_min.y) * 2 - 1.0;
-        m.z = (m.z - m_min.z) / (m_max.z - m_min.z) * 2 - 1.0;
-
-        var temp_a = locator_raw.a;
-        // normalize
-        vector_normalize( temp_a );
-        //vector_normalize( m);
-
-        // compute E and N
-        var E = new THREE.Vector3();
-        var N = new THREE.Vector3();
-        vector_cross(locator_raw.m, temp_a, E);
-        E.normalize();
-        vector_cross( temp_a,  E,  N);
-
-        // compute heading
-        var heading = Math.atan2(vector_dot( E,  from), vector_dot( N,  from)) ;
-        //if (heading < 0) heading += 360;
-      return heading;
-    }
- 
-    function vector_normalize(a) {
-        var mag = Math.sqrt( vector_dot(a,a) )
-        a.x /= mag
-        a.y /= mag
-        a.z /= mag
-    }
-
-    function vector_cross(a, b, out)
-    {
-      out.x = a.y*b.z - a.z*b.y;
-      out.y = a.z*b.x - a.x*b.z;
-      out.z = a.x*b.y - a.y*b.x;
-    }
-
-    function vector_dot(a, b)
-    {
-      return a.x*b.x+a.y*b.y+a.z*b.z;
-    }
-
-    
-
-/*
-public static Quaternion ToQ (THREE.Vector3 v)
-{
-    return ToQ (v.y, v.x, v.z);
-}
-
-public static Quaternion ToQ (float yaw, float pitch, float roll)
-{
-    yaw *= Mathf.Deg2Rad;
-    pitch *= Mathf.Deg2Rad;
-    roll *= Mathf.Deg2Rad;
-    float rollOver2 = roll * 0.5f;
-    float sinRollOver2 = (float)Math.Sin ((double)rollOver2);
-    float cosRollOver2 = (float)Math.Cos ((double)rollOver2);
-    float pitchOver2 = pitch * 0.5f;
-    float sinPitchOver2 = (float)Math.Sin ((double)pitchOver2);
-    float cosPitchOver2 = (float)Math.Cos ((double)pitchOver2);
-    float yawOver2 = yaw * 0.5f;
-    float sinYawOver2 = (float)Math.Sin ((double)yawOver2);
-    float cosYawOver2 = (float)Math.Cos ((double)yawOver2);
-    Quaternion result;
-    result.w = cosYawOver2 * cosPitchOver2 * cosRollOver2 + sinYawOver2 * sinPitchOver2 * sinRollOver2;
-    result.x = cosYawOver2 * sinPitchOver2 * cosRollOver2 + sinYawOver2 * cosPitchOver2 * sinRollOver2;
-    result.y = sinYawOver2 * cosPitchOver2 * cosRollOver2 - cosYawOver2 * sinPitchOver2 * sinRollOver2;
-    result.z = cosYawOver2 * cosPitchOver2 * sinRollOver2 - sinYawOver2 * sinPitchOver2 * cosRollOver2;
-
-    return result;
-}
-
-public static THREE.Vector3 FromQ2 (Quaternion q1)
-{
-    float sqw = q1.w * q1.w;
-    float sqx = q1.x * q1.x;
-    float sqy = q1.y * q1.y;
-    float sqz = q1.z * q1.z;
-    float unit = sqx + sqy + sqz + sqw; // if normalised is one, otherwise is correction factor
-    float test = q1.x * q1.w - q1.y * q1.z;
-    THREE.Vector3 v;
-
-    if (test>0.4995f*unit) { // singularity at north pole
-        v.y = 2f * Mathf.Atan2 (q1.y, q1.x);
-        v.x = Mathf.PI / 2;
-        v.z = 0;
-        return NormalizeAngles (v * Mathf.Rad2Deg);
-    }
-    if (test<-0.4995f*unit) { // singularity at south pole
-        v.y = -2f * Mathf.Atan2 (q1.y, q1.x);
-        v.x = -Mathf.PI / 2;
-        v.z = 0;
-        return NormalizeAngles (v * Mathf.Rad2Deg);
-    }
-    Quaternion q = new Quaternion (q1.w, q1.z, q1.x, q1.y);
-    v.y = (float)Math.Atan2 (2f * q.x * q.w + 2f * q.y * q.z, 1 - 2f * (q.z * q.z + q.w * q.w));     // Yaw
-    v.x = (float)Math.Asin (2f * (q.x * q.z - q.w * q.y));                             // Pitch
-    v.z = (float)Math.Atan2 (2f * q.x * q.y + 2f * q.z * q.w, 1 - 2f * (q.y * q.y + q.z * q.z));      // Roll
-    return NormalizeAngles (v * Mathf.Rad2Deg);
-}
-
-static THREE.Vector3 NormalizeAngles (THREE.Vector3 angles)
-{
-    angles.x = NormalizeAngle (angles.x);
-    angles.y = NormalizeAngle (angles.y);
-    angles.z = NormalizeAngle (angles.z);
-    return angles;
-}
-
-static float NormalizeAngle (float angle)
-{
-    while (angle>360)
-        angle -= 360;
-    while (angle<0)
-        angle += 360;
-    return angle;
-}
-*/
 
 </script>
 	</body>

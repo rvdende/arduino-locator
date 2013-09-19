@@ -36,7 +36,7 @@ float altitude;
 long int time = millis();
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200,SERIAL_8O2);
   Wire.begin();
   bmp085Calibration();
   compass.init();

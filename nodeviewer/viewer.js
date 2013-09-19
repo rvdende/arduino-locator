@@ -20,12 +20,26 @@ sp.list(function (err, ports) {
 	console.log("\ncomName\t\tmanufacturer")
   	console.log("====================================================================")
   	ports.forEach(function(port) {
-  		var n=port.manufacturer.indexOf("arduino");
-  		if (n >= 0) {
- 			arduino = new sp.SerialPort(port.comName, { baudrate: 115200, parser: sp.parsers.readline("\n") } ); 				
- 			arduino.on("open", arduinoConnect);
+  		
+  		if (port.manufacturer != undefined) {
+  			//WINDOWS
+  			console.log(port.comName+"\t\t"+port.manufacturer);
+	  		var n=port.manufacturer.indexOf("arduino");
+	  		if (n >= 0) {
+	 			arduino = new sp.SerialPort(port.comName, { baudrate: 115200, parser: sp.parsers.readline("\n") } ); 				
+	 			arduino.on("open", arduinoConnect);
+	  		}
+  		} else {
+  			//console.log(port)
+  			console.log(port.comName+"\t\t"+port.pnpId);
+  			var n=port.pnpId.indexOf("Arduino");
+	  		if (n >= 0) {
+	 			arduino = new sp.SerialPort(port.comName, { baudrate: 115200, parser: sp.parsers.readline("\n") } ); 				
+	 			arduino.on("open", arduinoConnect);
+	  		}
   		}
-  		console.log(port.comName+"\t\t"+port.manufacturer);
+  		
+  		
     	
   	});
   	console.log("====================================================================")
@@ -41,13 +55,14 @@ var testdata = 0;
 function dataParser(data) {
 	//convert datastream to string, then parse to JSON object
 	var indata = JSON.parse(data.toString()); 		
-	
+
 	if (testdata == 0) {
 		//only print data once.
 		console.log('Only first data object will be displayed:\n')
 		console.log(indata);
 		testdata = 1;
 	}
+
 	io.sockets.emit("locator", indata)	
 }
 
