@@ -11,12 +11,15 @@ Project aims
 
 Have an arduino equiped with gyro, accel, magnetometer, gps, barometric sensors and combine all of these into as accurate and responsive positional/rotational data as possible. This data should be repeatable and thus reliable for VR/REALWORLD integration/matching.
 
+Status
+=======
+
+23 September 2013 - Arduino UNO & nodejs operational. IMU AHRS code is still client side javscript in \arduino-locator\nodeviewer\static\locator.htm and uses THREEjs Vectors. Now busy getting ARM based DUE i2c to work, and then move AHRS code from js to firmware.
+
 Usage
 =====
 
-Arduino UNO + pololu MiniIMU-9 v2 #1268 + sparkfun BMP085
-
-https://www.sparkfun.com/tutorials/253
+Arduino UNO + [pololu MiniIMU-9 v2](http://www.pololu.com/catalog/product/1268) + [sparkfun BMP085](https://www.sparkfun.com/tutorials/253)
 
 Load firmware onto your arduino from `/firmware`
 
