@@ -47,66 +47,63 @@ void setup()
 }
 
 int loopcounter = 0;
-
+bool printjson = false;  //set to true for JSON raw out
 
 void loop()
 {
-  sensorUpdateL3GD20();
+  axisupdate();
   
   if (loopcounter%50 == 0) {
     sensorUpdateBMP085();  //update alti, temp and pressure
     loopcounter = 0;
   }
-  //send to computer
-  Serial.print("{ \"ax\" : \"");
-  Serial.print(accelx);
-  Serial.print("\",");  
-  Serial.print("\"ay\" : \"");
-  Serial.print(accely);  
-  Serial.print("\",");  
-  Serial.print("\"az\" : \"");
-  Serial.print(accelz);  
-  Serial.print("\","); 
   
-  Serial.print("\"mx\" : \"");
-  Serial.print(compassx);  
-  Serial.print("\",");    
-
-  Serial.print("\"my\" : \"");
-  Serial.print(compassy);  
-  Serial.print("\",");    
-
-  Serial.print("\"mz\" : \"");
-  Serial.print(compassz);  
-  Serial.print("\",");    
-
-  Serial.print("\"gx\" : \"");
-  Serial.print(gyrox);  
-  Serial.print("\",");    
-
-  Serial.print("\"gy\" : \"");
-  Serial.print(gyroy);  
-  Serial.print("\",");    
-
-  Serial.print("\"gz\" : \"");
-  Serial.print(gyroz);  
-  Serial.print("\",");  
+  //Calculates new stable orientation vectors and prints to Serialport
+  ahrsupdate();    
+  //See drone.ino
   
-  Serial.print("\"time\" : \"");
-  Serial.print(micros());  
-  Serial.print("\",");    
-///
-  Serial.print("\"tc\" : \"");
-  Serial.print(tempC);
-  Serial.print("\",");  
-
-  Serial.print("\"pr\" : \"");
-  Serial.print(pressurekPa);
-  Serial.print("\",");  
-  
-  Serial.print("\"al\" : \"");
-  Serial.print(altitudeMeters, 2);
-  Serial.println("\"}");
+  if (printjson == 1) {  
+    //send to computer
+    Serial.print("{ \"ax\" : \"");
+    Serial.print(accelx);
+    Serial.print("\",");  
+    Serial.print("\"ay\" : \"");
+    Serial.print(accely);  
+    Serial.print("\",");  
+    Serial.print("\"az\" : \"");
+    Serial.print(accelz);  
+    Serial.print("\",");     
+    Serial.print("\"mx\" : \"");
+    Serial.print(compassx);  
+    Serial.print("\",");      
+    Serial.print("\"my\" : \"");
+    Serial.print(compassy);  
+    Serial.print("\",");      
+    Serial.print("\"mz\" : \"");
+    Serial.print(compassz);  
+    Serial.print("\",");      
+    Serial.print("\"gx\" : \"");
+    Serial.print(gyrox);  
+    Serial.print("\",");  
+    Serial.print("\"gy\" : \"");
+    Serial.print(gyroy);  
+    Serial.print("\",");  
+    Serial.print("\"gz\" : \"");
+    Serial.print(gyroz);  
+    Serial.print("\","); 
+    Serial.print("\"time\" : \"");
+    Serial.print(micros());  
+    Serial.print("\",");  
+    Serial.print("\"tc\" : \"");
+    Serial.print(tempC);
+    Serial.print("\",");  
+    Serial.print("\"pr\" : \"");
+    Serial.print(pressurekPa);
+    Serial.print("\","); 
+    Serial.print("\"al\" : \"");
+    Serial.print(altitudeMeters, 2);
+    Serial.println("\"}");
+  }
   
   if (abs(micros() - timerns) < updaterate) {
     //delayMicroseconds( updaterate - abs(millis()-timerns) );  
@@ -116,7 +113,7 @@ void loop()
 }
 
 ////////////////////////////////////////////////////////////////////
-void sensorUpdateL3GD20() {
+void axisupdate() {
  L3GD20_read();
  LSM303DLHC_readAcc();
  LSM303DLHC_readMag();
@@ -137,4 +134,13 @@ void sensorUpdateBMP085() {
    pressurekPa = bmp085_get_pressure();
    altitudeMeters = bmp085_get_altitude();  
 }
+float avg = 0;
+void ahrsupdate() {
+  //OFFSETS
+  gyrox += 221;
+  gyroy -= 76;
+  gyroz -= 2;
+  droneUpdate(accelx,accely,accelz,gyrox,gyroy,gyroz,compassx,compassy,compassz);
+}
+
 

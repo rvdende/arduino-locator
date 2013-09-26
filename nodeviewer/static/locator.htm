@@ -169,11 +169,10 @@
 	            var magnetcross = new THREE.Vector3();
 	            magnetcross.copy(copter.magnet)
 	            magnetcross.cross(copter.magnetlock)
-	            //magnetcross.normalize();
+	            magnetcross.normalize();
 	            var magneterror = copter.magnetlock.angleTo(copter.magnet)
 	            magneterror *= 0.03;	//SLOWS DOWN CORRECTION
 
-	            
 	            copter.forward.applyAxisAngle(magnetcross,magneterror)    
 	            copter.up.applyAxisAngle(magnetcross,magneterror) 
 	            copter.right.applyAxisAngle(magnetcross,magneterror) 

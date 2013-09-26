@@ -173,6 +173,10 @@ qInv.w = q.w
 var vRot = q.multiply(w).multiply(qInv)
 console.log(vRot)
 
+
+var c = new Vector3(0,0,-5)
+var d = new Vector3(0,1,0)
+console.log(c.angle(d))
 /*
 function length() {
 	sqrt(x*x + y*y + z*z + w*w)
